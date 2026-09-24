@@ -81,6 +81,8 @@ router.post("/register", async (req, res) => {
     user.password = undefined as unknown as string;
     res.cookie("token", token, {
       httpOnly: true,
+      secure: true,
+      sameSite: "none",
     });
 
     capture("maxun-oss-user-registered", {
@@ -141,6 +143,8 @@ router.post("/login", async (req, res) => {
     }
     res.cookie("token", token, {
       httpOnly: true,
+      secure: true,
+      sameSite: "none",
     });
     capture("maxun-oss-user-login", {
       email: user.email,
@@ -458,7 +462,7 @@ router.get(
         { id: user.id },
         process.env.JWT_SECRET as string
       );
-      res.cookie("token", jwtToken, { httpOnly: true });
+      res.cookie("token", jwtToken, { httpOnly: true, secure: true, sameSite: "none" });
 
       // res.json({
       //     message: 'Google authentication successful',
