@@ -150,7 +150,7 @@ export const PageWrapper = () => {
                 />
                 <Route
                   path="/register"
-                  element={<Register />}
+                  element={import.meta.env.VITE_DISABLE_REGISTRATION === "true" ? <Navigate to="/login" replace /> : <Register />}
                 />
                 <Route
                   path="/recording-setup"

@@ -23,6 +23,9 @@ interface AuthenticatedRequest extends Request {
 }
 
 router.post("/register", async (req, res) => {
+  if (process.env.DISABLE_REGISTRATION === "true") {
+    return res.status(403).json({ ok: false, error: "Registration is disabled" });
+  }
   try {
     const { email, password } = req.body;
 

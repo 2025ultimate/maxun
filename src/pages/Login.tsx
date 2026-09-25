@@ -144,10 +144,14 @@ const Login = () => {
           )}
         </Button>
         <Typography variant="body2" align="center">
-          {t('login.register_prompt')}{" "}
-          <Link to="/register" style={{ textDecoration: "none", color: "#ff33cc" }}>
-            {t('login.register_link')}
-          </Link>
+          {import.meta.env.VITE_DISABLE_REGISTRATION !== "true" && (
+            <>
+              {t('login.register_prompt')}{" "}
+              <Link to="/register" style={{ textDecoration: "none", color: "#ff33cc" }}>
+                {t('login.register_link')}
+              </Link>
+            </>
+          )}
         </Typography>
       </Box>
     </Box>
