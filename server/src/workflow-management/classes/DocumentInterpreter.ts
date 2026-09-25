@@ -1,3 +1,4 @@
+import { defaultLlmProvider, applyDefaultLlmEnv } from '../../utils/llm-default';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -1009,7 +1010,9 @@ class DocumentLLMClient {
     userPrompt: string,
     llmConfig?: LLMConfig
   ): Promise<ProviderResult> {
-    const config: LLMConfig = llmConfig || { provider: 'ollama' };
+    const config: LLMConfig = llmConfig
+      ? (applyDefaultLlmEnv(llmConfig) as LLMConfig)
+      : (applyDefaultLlmEnv({ provider: defaultLlmProvider() }) as LLMConfig);
 
     switch (config.provider) {
       case 'anthropic':

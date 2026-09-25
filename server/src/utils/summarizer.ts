@@ -1,3 +1,4 @@
+import { defaultLlmProvider, applyDefaultLlmEnv } from './llm-default';
 import Anthropic from '@anthropic-ai/sdk';
 import { resolveLlmModel } from './llm-models';
 import axios from 'axios';
@@ -62,7 +63,9 @@ export async function summarizeMarkdown(markdown: string, llmConfig?: LLMConfig)
   const truncated = markdown.substring(0, 40000);
   const userPrompt = USER_PROMPT_PREFIX + truncated;
 
-  const config: LLMConfig = llmConfig || { provider: 'ollama' };
+  const config: LLMConfig = (llmConfig
+    ? applyDefaultLlmEnv(llmConfig)
+    : applyDefaultLlmEnv({ provider: defaultLlmProvider() })) as LLMConfig;
   const { provider } = config;
 
   if (provider === 'anthropic') {
