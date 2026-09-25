@@ -4,7 +4,8 @@ import Run from '../models/Run';
 const minioClient = new Client({
   endPoint: process.env.MINIO_ENDPOINT ? process.env.MINIO_ENDPOINT : 'localhost',
   port: parseInt(process.env.MINIO_PORT || '9000'),
-  useSSL: false,
+  useSSL: (process.env.MINIO_USE_SSL || 'false') === 'true',
+  region: process.env.MINIO_REGION || undefined,
   accessKey: process.env.MINIO_ACCESS_KEY || 'minio-access-key',
   secretKey: process.env.MINIO_SECRET_KEY || 'minio-secret-key',
 });
@@ -30,11 +31,19 @@ async function fixMinioBucketConfiguration(bucketName: string) {
         },
       ],
     };
-    await minioClient.setBucketPolicy(bucketName, JSON.stringify(policyJSON));
-    console.log(`Public-read policy applied to bucket ${bucketName}.`);
+    // R2/S3-compatible stores may reject setBucketPolicy; that is fine since
+    // we serve objects via presigned URLs / authenticated reads, not public policy.
+    try {
+      await minioClient.setBucketPolicy(bucketName, JSON.stringify(policyJSON));
+      console.log(`Public-read policy applied to bucket ${bucketName}.`);
+    } catch (policyErr) {
+      console.warn(`setBucketPolicy not supported for ${bucketName} (skipping):`, (policyErr as any)?.message || policyErr);
+    }
   } catch (error) {
-    console.error(`Error configuring bucket ${bucketName}:`, error);
-    throw error;
+    // Tolerate providers (e.g. Cloudflare R2) where bucket already exists but
+    // makeBucket/policy calls are restricted. Only log; uploads will still work
+    // if the bucket exists.
+    console.warn(`Bucket configuration check warning for ${bucketName}:`, (error as any)?.message || error);
   }
 }
 
