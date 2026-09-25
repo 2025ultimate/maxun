@@ -25,4 +25,4 @@ COPY --from=builder /app/build ./build
 
 EXPOSE ${FRONTEND_PORT:-5173}
 
-CMD ["sh", "-c", "BACKEND=\"${VITE_BACKEND_URL:-${BACKEND_URL:-http://localhost:8080}}\"; grep -rl '__VITE_BACKEND_URL__' build 2>/dev/null | xargs -r sed -i \"s|__VITE_BACKEND_URL__|${BACKEND}|g\"; DR=\"${VITE_DISABLE_REGISTRATION:-${DISABLE_REGISTRATION:-false}}\"; sed -i \"s|<head>|<head><script>window.__MAXUN_RUNTIME__={DISABLE_REGISTRATION:\'${DR}\'};</script>|\" build/index.html; exec serve -s build -l ${FRONTEND_PORT:-5173}"]
+CMD ["sh", "-c", "BACKEND=\"${VITE_BACKEND_URL:-${BACKEND_URL:-http://localhost:8080}}\"; grep -rl '__VITE_BACKEND_URL__' build 2>/dev/null | xargs -r sed -i \"s|__VITE_BACKEND_URL__|${BACKEND}|g\"; exec serve -s build -l ${FRONTEND_PORT:-5173}"]
