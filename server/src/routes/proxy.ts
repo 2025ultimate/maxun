@@ -174,8 +174,43 @@ const maskProxyUrl = (url: string) => {
     }
 };
 
+// Optional server-wide rotating proxy pool. Set PROXY_POOL to a comma-separated
+// list of host:port:username:password entries; one is chosen at random per
+// browser launch. When set, it takes precedence over a user's single stored proxy.
+interface PoolEntry { server: string; username?: string; password?: string }
+let POOL: PoolEntry[] | null = null;
+function getProxyPool(): PoolEntry[] {
+    if (POOL) return POOL;
+    const raw = (process.env.PROXY_POOL || '').trim();
+    if (!raw) { POOL = []; return POOL; }
+    POOL = raw.split(',').map((entry) => entry.trim()).filter(Boolean).map((entry) => {
+        const [host, port, username, password] = entry.split(':');
+        return {
+            server: `http://${host}:${port}`,
+            ...(username ? { username } : {}),
+            ...(password ? { password } : {}),
+        };
+    });
+    return POOL;
+}
+function pickFromPool(): PoolEntry | null {
+    const pool = getProxyPool();
+    if (pool.length === 0) return null;
+    return pool[Math.floor(Math.random() * pool.length)];
+}
+
 // TODO: Move this from here
 export const getDecryptedProxyConfig = async (userId: string) => {
+    // Rotating pool (if configured) wins over any per-user proxy.
+    const pooled = pickFromPool();
+    if (pooled) {
+        return {
+            proxy_url: pooled.server,
+            proxy_username: pooled.username || null,
+            proxy_password: pooled.password || null,
+        };
+    }
+
     const user = await User.findByPk(userId, {
         raw: true,
     });
