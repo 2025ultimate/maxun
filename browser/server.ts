@@ -45,7 +45,8 @@ async function start(): Promise<void> {
         // Health check HTTP server
         const healthServer = http.createServer((req, res) => {
             if (req.url === '/health') {
-                const wsEndpoint = browserServer?.wsEndpoint().replace('localhost', BROWSER_WS_HOST) || '';
+                const raw = browserServer?.wsEndpoint() || '';
+            const wsEndpoint = raw.replace(/ws\:\/\/(localhost|0\.0\.0\.0|127\.0\.0\.1)/, `ws://${BROWSER_WS_HOST}`);
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({
                     status: 'healthy',
@@ -56,7 +57,8 @@ async function start(): Promise<void> {
                 }));
             } else if (req.url === '/') {
                 res.writeHead(200, { 'Content-Type': 'text/plain' });
-                const wsEndpoint = browserServer?.wsEndpoint().replace('localhost', BROWSER_WS_HOST) || '';
+                const raw = browserServer?.wsEndpoint() || '';
+            const wsEndpoint = raw.replace(/ws\:\/\/(localhost|0\.0\.0\.0|127\.0\.0\.1)/, `ws://${BROWSER_WS_HOST}`);
                 res.end(`Maxun Browser Service\nWebSocket: ${wsEndpoint}\nHealth: http://localhost:${BROWSER_HEALTH_PORT}/health`);
             } else {
                 res.writeHead(404);
