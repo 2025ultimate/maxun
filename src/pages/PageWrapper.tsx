@@ -10,6 +10,7 @@ import { useGlobalInfoStore } from "../context/globalInfo";
 import { AlertSnackbar } from "../components/ui/AlertSnackbar";
 import Login from './Login';
 import Register from './Register';
+import { isRegistrationDisabled } from "../runtimeConfig";
 import UserRoute from '../routes/userRoute';
 import { Routes, Route, useNavigate, Navigate } from 'react-router-dom';
 import { NotFoundPage } from '../components/dashboard/NotFound';
@@ -150,7 +151,7 @@ export const PageWrapper = () => {
                 />
                 <Route
                   path="/register"
-                  element={import.meta.env.VITE_DISABLE_REGISTRATION === "true" ? <Navigate to="/login" replace /> : <Register />}
+                  element={isRegistrationDisabled() ? <Navigate to="/login" replace /> : <Register />}
                 />
                 <Route
                   path="/recording-setup"

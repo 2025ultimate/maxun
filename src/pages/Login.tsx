@@ -1,6 +1,7 @@
 import axios from "axios";
 import { useState, useContext, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { isRegistrationDisabled } from "../runtimeConfig";
 import { AuthContext } from "../context/auth";
 import { Box, Typography, TextField, Button, CircularProgress } from "@mui/material";
 import { useGlobalInfoStore } from "../context/globalInfo";
@@ -144,7 +145,7 @@ const Login = () => {
           )}
         </Button>
         <Typography variant="body2" align="center">
-          {import.meta.env.VITE_DISABLE_REGISTRATION !== "true" && (
+          {!isRegistrationDisabled() && (
             <>
               {t('login.register_prompt')}{" "}
               <Link to="/register" style={{ textDecoration: "none", color: "#ff33cc" }}>
