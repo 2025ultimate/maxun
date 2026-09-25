@@ -5,6 +5,7 @@ import * as https from 'https';
 import * as net from 'net';
 
 const OPENAI_DEFAULT_BASE_URL = 'https://api.openai.com/v1';
+const FIREWORKS_DEFAULT_BASE_URL = 'https://api.fireworks.ai/inference/v1';
 
 const normalize = (value: unknown): string =>
   typeof value === 'string' ? value.trim().replace(/\/+$/, '') : '';
@@ -27,7 +28,14 @@ export function resolveOpenAiApiKey(configuredKey?: unknown, baseUrl?: unknown):
     target === normalize(OPENAI_DEFAULT_BASE_URL) ||
     target === normalize(process.env.OPENAI_BASE_URL);
 
-  return operatorConfigured ? process.env.OPENAI_API_KEY || '' : '';
+  if (operatorConfigured) return process.env.OPENAI_API_KEY || '';
+
+  // Fireworks AI OpenAI-compatible endpoint: fall back to its own server key.
+  if (target === normalize(FIREWORKS_DEFAULT_BASE_URL)) {
+    return process.env.FIREWORKS_API_KEY || process.env.OPENAI_API_KEY || '';
+  }
+
+  return '';
 }
 
 /**

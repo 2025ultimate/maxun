@@ -58,7 +58,7 @@ function TabPanel(props: TabPanelProps) {
 }
 
 type LlmProvider = 'anthropic' | 'openai' | 'ollama';
-type OpenAICompatiblePresetId = 'openai' | 'qianfan' | 'openrouter' | 'deepseek' | 'custom';
+type OpenAICompatiblePresetId = 'openai' | 'qianfan' | 'openrouter' | 'deepseek' | 'fireworks' | 'custom';
 
 interface OpenAICompatiblePreset {
   label: string;
@@ -115,6 +115,16 @@ const OPENAI_COMPATIBLE_PRESETS: Record<OpenAICompatiblePresetId, OpenAICompatib
     apiKeyPlaceholder: 'DeepSeek API key',
     apiKeyHelperText: 'Use a DeepSeek API key. If blank, Maxun falls back to OPENAI_API_KEY on the server.',
   },
+  fireworks: {
+    label: 'Fireworks AI',
+    baseUrl: 'https://api.fireworks.ai/inference/v1',
+    baseUrlPlaceholder: 'https://api.fireworks.ai/inference/v1',
+    baseUrlHelperText: 'Use the Fireworks AI OpenAI-compatible endpoint, or override it for your account.',
+    modelPlaceholder: 'e.g. accounts/fireworks/models/deepseek-v4p1-flash',
+    modelHelperText: 'Enter a Fireworks model id, e.g. accounts/fireworks/models/deepseek-v4p1-flash.',
+    apiKeyPlaceholder: 'Fireworks API key',
+    apiKeyHelperText: 'Use a Fireworks API key. If blank, Maxun falls back to FIREWORKS_API_KEY on the server.',
+  },
   custom: {
     label: 'Custom',
     baseUrl: '',
@@ -132,6 +142,7 @@ const OPENAI_COMPATIBLE_PRESET_IDS: OpenAICompatiblePresetId[] = [
   'qianfan',
   'openrouter',
   'deepseek',
+  'fireworks',
   'custom',
 ];
 
