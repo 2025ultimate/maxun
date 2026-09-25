@@ -138,7 +138,10 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
         },
         function (error) {
             const res = error.response;
-            if (res?.status === 401 && res.config && !res.config.__isRetryRequest) {
+            const url = res?.config?.url || "";
+            const isAuthCheck = url.includes("/auth/") || url.includes("/current-user");
+            // Only force-logout on a genuine auth verification 401, not incidental 401s (websockets, optional integrations)
+            if (res?.status === 401 && isAuthCheck && res.config && !res.config.__isRetryRequest) {
                 return new Promise((_, reject) => {
                     handleLogout()
                         .then(() => {
