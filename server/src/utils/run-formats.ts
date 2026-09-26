@@ -21,11 +21,12 @@ export interface FormatRunResult {
 }
 
 const SCRAPE_TIMEOUT = 120000;
+const NAV_TIMEOUT = 60000;
 
-function withTimeout<T>(p: Promise<T>, label: string): Promise<T> {
+function withTimeout<T>(p: Promise<T>, label: string, timeoutMs: number): Promise<T> {
   return Promise.race([
     p,
-    new Promise<never>((_, r) => setTimeout(() => r(new Error(`${label} timed out after ${SCRAPE_TIMEOUT / 1000}s`)), SCRAPE_TIMEOUT)),
+    new Promise<never>((_, r) => setTimeout(() => r(new Error(`${label} timed out after ${Math.round(timeoutMs / 1000)}s`)), timeoutMs)),
   ]);
 }
 
@@ -50,9 +51,13 @@ export async function runFormatsForPage(
     /** returns a fresh page with no proxy, or null if not possible */
     retryWithoutProxy?: () => Promise<Page | null>;
     runId?: string;
+    /** per-request overall timeout (ms). Default 120000. */
+    timeoutMs?: number;
   } = {}
 ): Promise<FormatRunResult> {
-  const { strict = false, retryWithoutProxy, runId = '' } = opts;
+  const { strict = false, retryWithoutProxy, runId = '', timeoutMs } = opts;
+  const total = Math.min(Math.max(timeoutMs ?? SCRAPE_TIMEOUT, 5000), 300000);
+  const navTimeout = Math.min(total, NAV_TIMEOUT);
 
   const serializableOutput: Record<string, any> = {};
   const binaryOutput: Record<string, any> = {};
@@ -92,21 +97,21 @@ export async function runFormatsForPage(
 
   if (formats.includes('screenshot-visible')) {
     await attempt(async () => {
-      const buf = await withTimeout(convertPageToScreenshot(url, activePage, false), 'screenshot-visible');
+      const buf = await withTimeout(convertPageToScreenshot(url, activePage, false, navTimeout), 'screenshot-visible', total);
       binaryOutput['screenshot-visible'] = { data: buf.toString('base64'), mimeType: 'image/png' };
     }, 'screenshot-visible');
   }
 
   if (formats.includes('screenshot-fullpage')) {
     await attempt(async () => {
-      const buf = await withTimeout(convertPageToScreenshot(url, activePage, true), 'screenshot-fullpage');
+      const buf = await withTimeout(convertPageToScreenshot(url, activePage, true, navTimeout), 'screenshot-fullpage', total);
       binaryOutput['screenshot-fullpage'] = { data: buf.toString('base64'), mimeType: 'image/png' };
     }, 'screenshot-fullpage');
   }
 
   if (formats.includes('text')) {
     await attempt(async () => {
-      const text = await withTimeout(convertPageToText(url, activePage), 'text');
+      const text = await withTimeout(convertPageToText(url, activePage, navTimeout), 'text', total);
       if (text) serializableOutput.text = [{ content: text }];
       else throw new Error('text conversion returned empty content');
     }, 'text');
@@ -114,7 +119,7 @@ export async function runFormatsForPage(
 
   if (formats.includes('markdown')) {
     await attempt(async () => {
-      markdown = await withTimeout(convertPageToMarkdown(url, activePage), 'markdown');
+      markdown = await withTimeout(convertPageToMarkdown(url, activePage, navTimeout), 'markdown', total);
       if (markdown && markdown.trim().length > 0) {
         serializableOutput.markdown = [{ content: markdown }];
       } else {
@@ -125,7 +130,7 @@ export async function runFormatsForPage(
 
   if (formats.includes('html')) {
     await attempt(async () => {
-      html = await withTimeout(convertPageToHTML(url, activePage), 'html');
+      html = await withTimeout(convertPageToHTML(url, activePage, navTimeout), 'html', total);
       if (html && html.trim().length > 0) {
         serializableOutput.html = [{ content: html }];
       } else {
@@ -136,7 +141,7 @@ export async function runFormatsForPage(
 
   if (formats.includes('links')) {
     await attempt(async () => {
-      const links = await withTimeout(convertPageToLinks(url, activePage), 'links');
+      const links = await withTimeout(convertPageToLinks(url, activePage, navTimeout), 'links', total);
       if (links && links.length > 0) {
         serializableOutput.links = links.map((link: string) => ({ url: link }));
       } else {

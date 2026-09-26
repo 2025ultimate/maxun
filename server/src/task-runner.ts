@@ -260,7 +260,7 @@ async function processRunExecution(data: ExecuteRunData): Promise<void> {
             return null;
           };
 
-          const fmt = await runFormatsForPage(url, currentPage, formats, { strict: strictFormats, retryWithoutProxy, runId: data.runId });
+          const fmt = await runFormatsForPage(url, currentPage, formats, { strict: strictFormats, retryWithoutProxy, runId: data.runId, timeoutMs: (run.interpreterSettings as any)?.timeoutMs });
           const serializableOutput: any = fmt.serializableOutput;
           const binaryOutput: any = fmt.binaryOutput;
           let markdown = fmt.markdown;

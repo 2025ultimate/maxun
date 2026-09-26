@@ -679,7 +679,9 @@ router.post("/sdk/robots/:id/execute", requireAPIKey, async (req: AuthenticatedR
         const promptInstructions = req.body?.promptInstructions;
         const requestedFormats = req.body?.formats as OutputFormats[] | undefined;
         
-        const runId = await handleRunRecording(robotId, user.id.toString(), runSource, requestedFormats, promptInstructions);
+        const timeoutMsRawE = Number(req.body?.timeoutMs);
+        const timeoutMsE = Number.isFinite(timeoutMsRawE) && timeoutMsRawE > 0 ? Math.min(Math.max(timeoutMsRawE, 5000), 300000) : undefined;
+        const runId = await handleRunRecording(robotId, user.id.toString(), runSource, requestedFormats, promptInstructions, timeoutMsE);
         if (!runId) {
             throw new Error('Failed to start robot execution');
         }
@@ -806,6 +808,8 @@ router.post("/sdk/scrape", requireAPIKey, async (req: AuthenticatedRequest, res:
         const url = (req.body?.url || '').trim();
         const requestedFormats = (req.body?.formats as OutputFormats[] | undefined) || ['markdown'];
         const promptInstructions = req.body?.promptInstructions;
+        const timeoutMsRaw = Number(req.body?.timeoutMs);
+        const timeoutMs = Number.isFinite(timeoutMsRaw) && timeoutMsRaw > 0 ? Math.min(Math.max(timeoutMsRaw, 5000), 300000) : undefined;
 
         if (!url) return res.status(400).json({ error: 'url is required' });
         try { new URL(url); } catch { return res.status(400).json({ error: 'invalid url' }); }
@@ -827,7 +831,7 @@ router.post("/sdk/scrape", requireAPIKey, async (req: AuthenticatedRequest, res:
             recording: { workflow: [] } as any,
         } as any);
 
-        const runId = await handleRunRecording(transientRobotId, user.id.toString(), 'sdk', requestedFormats, promptInstructions);
+        const runId = await handleRunRecording(transientRobotId, user.id.toString(), 'sdk', requestedFormats, promptInstructions, timeoutMs);
         if (!runId) throw new Error('Failed to start scrape');
 
         const run = await waitForRunCompletion(runId);

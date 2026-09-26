@@ -543,7 +543,7 @@ router.get("/robots/:id/runs/:runId", requireAPIKey, async (req: Request, res: R
     }
 });
 
-async function createWorkflowAndStoreMetadata(id: string, userId: string, runSource: 'api' | 'sdk' | 'mcp' | 'cli', requestedFormats?: OutputFormats[], promptInstructions?: string) {
+async function createWorkflowAndStoreMetadata(id: string, userId: string, runSource: 'api' | 'sdk' | 'mcp' | 'cli', requestedFormats?: OutputFormats[], promptInstructions?: string, timeoutMs?: number) {
     try {
         const recording = await Robot.findOne({
             where: {
@@ -587,7 +587,7 @@ async function createWorkflowAndStoreMetadata(id: string, userId: string, runSou
             startedAt: new Date().toLocaleString(),
             finishedAt: '',
             browserId,
-            interpreterSettings: { maxConcurrency: 1, maxRepeats: 1, debug: true, formats: requestedFormats, promptInstructions, ...(isDocRobot && { robotType }) },
+            interpreterSettings: { maxConcurrency: 1, maxRepeats: 1, debug: true, formats: requestedFormats, promptInstructions, timeoutMs, ...(isDocRobot && { robotType }) },
             log: '',
             runId,
             runByUserId: userId,
@@ -1436,9 +1436,9 @@ async function executeRun(id: string, userId: string) {
     }
 }
 
-export async function handleRunRecording(id: string, userId: string, runSource: 'api' | 'sdk' | 'mcp' | 'cli' = 'api', requestedFormats?: OutputFormats[], promptInstructions?: string) {
+export async function handleRunRecording(id: string, userId: string, runSource: 'api' | 'sdk' | 'mcp' | 'cli' = 'api', requestedFormats?: OutputFormats[], promptInstructions?: string, timeoutMs?: number) {
     try {
-        const result = await createWorkflowAndStoreMetadata(id, userId, runSource, requestedFormats, promptInstructions);
+        const result = await createWorkflowAndStoreMetadata(id, userId, runSource, requestedFormats, promptInstructions, timeoutMs);
         const { runId: newRunId, isDocRobot } = result as any;
 
         if (!newRunId || !userId) {

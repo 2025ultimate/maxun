@@ -9,6 +9,8 @@ interface InterpreterSettings {
   debug: boolean;
   formats?: OutputFormats[];
   promptInstructions?: string;
+  timeoutMs?: number;
+  robotType?: string;
 }
 
 interface RunAttributes {

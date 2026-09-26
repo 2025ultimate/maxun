@@ -104,7 +104,7 @@ async function dismissOverlays(page: Page): Promise<void> {
   } catch {}
 }
 
-async function gotoWithFallback(page: any, url: string, forScreenshot = false) {
+async function gotoWithFallback(page: any, url: string, forScreenshot = false, navTimeout = 60000) {
   try {
     const current = page.url();
     if (current && current !== 'about:blank') {
@@ -115,11 +115,11 @@ async function gotoWithFallback(page: any, url: string, forScreenshot = false) {
 
   const waitUntil = forScreenshot ? 'load' : 'domcontentloaded';
   try {
-    return await page.goto(url, { waitUntil, timeout: 60000 });
+    return await page.goto(url, { waitUntil, timeout: navTimeout });
   } catch (err: any) {
     // One retry at the most-permissive load state; if that also fails, surface it.
     try {
-      return await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+      return await page.goto(url, { waitUntil: 'domcontentloaded', timeout: navTimeout });
     } catch (err2: any) {
       const msg = (err2 && err2.message) || (err && (err as any).message) || 'navigation failed';
       throw new Error(`Navigation to ${url} failed: ${msg}`);
@@ -139,11 +139,11 @@ export function isProxyConnectionError(msg: string | undefined): boolean {
  * @param url - The URL to convert
  * @param page - Existing Playwright page instance to use
  */
-export async function convertPageToMarkdown(url: string, page: Page): Promise<string> {
+export async function convertPageToMarkdown(url: string, page: Page, navTimeout?: number): Promise<string> {
   try {
     logger.log('info', `[Scrape] Using existing page instance for markdown conversion of ${url}`);
 
-    await gotoWithFallback(page, url);
+    await gotoWithFallback(page, url, false, navTimeout);
     await waitForPageReady(page);
     await dismissOverlays(page);
 
@@ -247,11 +247,11 @@ export async function convertPageToMarkdown(url: string, page: Page): Promise<st
  * @param url - The URL to convert
  * @param page - Existing Playwright page instance to use
  */
-export async function convertPageToHTML(url: string, page: Page): Promise<string> {
+export async function convertPageToHTML(url: string, page: Page, navTimeout?: number): Promise<string> {
   try {
     logger.log('info', `[Scrape] Using existing page instance for HTML conversion of ${url}`);
 
-    await gotoWithFallback(page, url);
+    await gotoWithFallback(page, url, false, navTimeout);
     await waitForPageReady(page);
     await dismissOverlays(page);
 
@@ -337,11 +337,11 @@ export async function convertPageToHTML(url: string, page: Page): Promise<string
   }
 }
 
-export async function convertPageToText(url: string, page: Page): Promise<string> {
+export async function convertPageToText(url: string, page: Page, navTimeout?: number): Promise<string> {
   try {
     logger.log('info', `[Scrape] Using existing page instance for text conversion of ${url}`);
 
-    await gotoWithFallback(page, url);
+    await gotoWithFallback(page, url, false, navTimeout);
     await waitForPageReady(page);
     await dismissOverlays(page);
 
@@ -363,11 +363,11 @@ export async function convertPageToText(url: string, page: Page): Promise<string
  * @param url - The URL to extract links from
  * @param page - Existing Playwright page instance to use
  */
-export async function convertPageToLinks(url: string, page: Page): Promise<string[]> {
+export async function convertPageToLinks(url: string, page: Page, navTimeout?: number): Promise<string[]> {
   try {
     logger.log('info', `Extracting links from ${url}`);
 
-    await gotoWithFallback(page, url);
+    await gotoWithFallback(page, url, false, navTimeout);
     await waitForPageReady(page);
     await dismissOverlays(page);
 
@@ -390,12 +390,12 @@ export async function convertPageToLinks(url: string, page: Page): Promise<strin
  * @param page - Existing Playwright page instance to use
  * @param fullPage - Whether to capture the full scrollable page (true) or just visible viewport (false)
  */
-export async function convertPageToScreenshot(url: string, page: Page, fullPage: boolean = false): Promise<Buffer> {
+export async function convertPageToScreenshot(url: string, page: Page, fullPage: boolean = false, navTimeout?: number): Promise<Buffer> {
   try {
     const screenshotType = fullPage ? 'full page' : 'visible viewport';
     logger.log('info', `[Scrape] Taking ${screenshotType} screenshot of ${url}`);
 
-    await gotoWithFallback(page, url, true);
+    await gotoWithFallback(page, url, true, navTimeout);
     await waitForPageReady(page);
     await page.waitForFunction(
       () => Array.from(document.images).every(img => img.complete),
