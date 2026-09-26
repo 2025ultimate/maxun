@@ -1021,6 +1021,26 @@ export class RemoteBrowser {
     };
 
     /**
+     * Creates a fresh page in a NEW browser context with NO proxy, for the
+     * proxy-fallback retry. Returns null if the browser/context is unavailable.
+     * The caller is responsible for using (and optionally closing) this page.
+     */
+    public newPageWithoutProxy = async (): Promise<Page | null> => {
+        try {
+            if (!this.browser) return null;
+            const ctx = await this.browser.newContext({
+                javaScriptEnabled: true,
+                userAgent: this.getUserAgent(),
+            });
+            const page = await ctx.newPage();
+            return page;
+        } catch (e: any) {
+            logger?.log?.('warn', `newPageWithoutProxy failed: ${e?.message || e}`);
+            return null;
+        }
+    };
+
+    /**
      * Changes the active page to the page instance on the given index
      * available in pages array on the {@link BrowserContext}.
      * Automatically stops the screencast session on the previous page and starts the new one.

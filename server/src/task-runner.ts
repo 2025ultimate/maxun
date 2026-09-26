@@ -20,6 +20,7 @@ import { io as serverIo } from './server';
 import { sendWebhook } from './routes/webhook';
 import { BinaryOutputService } from './storage/mino';
 import { convertPageToMarkdown, convertPageToHTML, convertPageToLinks, convertPageToScreenshot, convertPageToText } from './markdownify/scrape';
+import { runFormatsForPage } from './utils/run-formats';
 import { executeBrowserAgent } from './sdk/browserAgent';
 import { processRobotOutputFormats } from './utils/output-post-processor';
 import { getInterpretationFailureReason, hasExpectedRobotOutput, flushReloadAndCheckPartialOutput } from './utils/output-validation';
@@ -250,41 +251,24 @@ async function processRunExecution(data: ExecuteRunData): Promise<void> {
           const url = getRobotTargetUrl(recording);
           if (!url) throw new Error('No URL specified for scrape robot');
 
-          const serializableOutput: any = {};
-          const binaryOutput: any = {};
-          const SCRAPE_TIMEOUT = 120000;
-
-          if (formats.includes('screenshot-visible')) {
-            const buf = await Promise.race([convertPageToScreenshot(url, currentPage, false), new Promise<never>((_, r) => setTimeout(() => r(new Error('timeout')), SCRAPE_TIMEOUT))]);
-            if (!binaryOutput['screenshot-visible']) binaryOutput['screenshot-visible'] = { data: buf.toString('base64'), mimeType: 'image/png' };
-          }
-
-          if (formats.includes('screenshot-fullpage')) {
-            const buf = await Promise.race([convertPageToScreenshot(url, currentPage, true), new Promise<never>((_, r) => setTimeout(() => r(new Error('timeout')), SCRAPE_TIMEOUT))]);
-            if (!binaryOutput['screenshot-fullpage']) binaryOutput['screenshot-fullpage'] = { data: buf.toString('base64'), mimeType: 'image/png' };
-          }
-
-          if (formats.includes('text')) {
-            const text = await Promise.race([convertPageToText(url, currentPage), new Promise<never>((_, r) => setTimeout(() => r(new Error('timeout')), SCRAPE_TIMEOUT))]);
-            if (text) serializableOutput.text = [{ content: text }];
-          }
-
-          let markdown = '';
-          if (formats.includes('markdown') || formats.includes('summary')) {
+          const strictFormats = process.env.SCRAPE_STRICT !== 'false';
+          const retryWithoutProxy = async () => {
             try {
-              markdown = await Promise.race([convertPageToMarkdown(url, currentPage), new Promise<never>((_, r) => setTimeout(() => r(new Error('timeout')), SCRAPE_TIMEOUT))]);
-              if (markdown && markdown.trim().length > 0 && formats.includes('markdown')) {
-                serializableOutput.markdown = [{ content: markdown }];
-              }
-            } catch (error: any) {
-              logger.log('warn', `Markdown conversion failed for run ${data.runId}: ${error.message}`);
-            }
-          }
+              const b = browserPool.getRemoteBrowser(browserId) as any;
+              if (b && typeof b.newPageWithoutProxy === 'function') return await b.newPageWithoutProxy();
+            } catch (_) {}
+            return null;
+          };
+
+          const fmt = await runFormatsForPage(url, currentPage, formats, { strict: strictFormats, retryWithoutProxy, runId: data.runId });
+          const serializableOutput: any = fmt.serializableOutput;
+          const binaryOutput: any = fmt.binaryOutput;
+          let markdown = fmt.markdown;
 
           if (formats.includes('summary')) {
             try {
               if (!markdown) {
-                markdown = await Promise.race([convertPageToMarkdown(url, currentPage), new Promise<never>((_, r) => setTimeout(() => r(new Error('timeout')), SCRAPE_TIMEOUT))]);
+                markdown = await convertPageToMarkdown(url, currentPage);
               }
               if (markdown && markdown.trim().length > 0) {
                 const { summarizeMarkdown } = require('./utils/summarizer');
@@ -299,20 +283,7 @@ async function processRunExecution(data: ExecuteRunData): Promise<void> {
               }
             } catch (error: any) {
               logger.log('warn', `Summary generation failed for run ${data.runId}: ${error.message}`);
-            }
-          }
-
-          if (formats.includes('html')) {
-            const html = await Promise.race([convertPageToHTML(url, currentPage), new Promise<never>((_, r) => setTimeout(() => r(new Error('timeout')), SCRAPE_TIMEOUT))]);
-            serializableOutput.html = [{ content: html }];
-          }
-
-          if (formats.includes('links')) {
-            try {
-              const links = await Promise.race([convertPageToLinks(url, currentPage), new Promise<never>((_, r) => setTimeout(() => r(new Error('timeout')), SCRAPE_TIMEOUT))]);
-              if (links && links.length > 0) serializableOutput.links = links.map((link: string) => ({ url: link }));
-            } catch (error: any) {
-              logger.log('warn', `Links extraction failed for run ${data.runId}: ${error.message}`);
+              if (strictFormats) fmt.errors['summary'] = error.message;
             }
           }
 
@@ -332,6 +303,11 @@ async function processRunExecution(data: ExecuteRunData): Promise<void> {
               logger.log('warn', `Smart query failed for run ${data.runId}: ${agentError.message}`);
               serializableOutput.promptResult = [{ content: `Smart query failed: ${agentError.message}`, steps: [] }];
             }
+          }
+
+          if (Object.keys(fmt.errors).length > 0) {
+            serializableOutput._formatErrors = fmt.errors;
+            await run.update({ log: `Format errors: ${Object.entries(fmt.errors).map(([k,v])=>`${k}: ${v}`).join(' | ')}` });
           }
 
           const finishedAt = new Date().toLocaleString();

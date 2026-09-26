@@ -116,9 +116,21 @@ async function gotoWithFallback(page: any, url: string, forScreenshot = false) {
   const waitUntil = forScreenshot ? 'load' : 'domcontentloaded';
   try {
     return await page.goto(url, { waitUntil, timeout: 60000 });
-  } catch (err) {
-    return await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+  } catch (err: any) {
+    // One retry at the most-permissive load state; if that also fails, surface it.
+    try {
+      return await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    } catch (err2: any) {
+      const msg = (err2 && err2.message) || (err && (err as any).message) || 'navigation failed';
+      throw new Error(`Navigation to ${url} failed: ${msg}`);
+    }
   }
+}
+
+/** True for proxy-level failures where a direct (no-proxy) retry is worth attempting. */
+export function isProxyConnectionError(msg: string | undefined): boolean {
+  if (!msg) return false;
+  return /ERR_TUNNEL_CONNECTION_FAILED|ERR_PROXY_CONNECTION_FAILED|ERR_SOCKS|ERR_PROXY|407|tunnel/i.test(msg);
 }
 
 /**

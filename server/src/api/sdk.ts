@@ -791,6 +791,74 @@ router.post("/sdk/robots/:id/execute", requireAPIKey, async (req: AuthenticatedR
     }
 });
 
+
+/**
+ * One-shot scrape: POST /api/sdk/scrape { url, formats }
+ * Creates a transient scrape robot, runs it, returns output, deletes the robot.
+ * Saves creating + deleting a robot per page.
+ */
+router.post("/sdk/scrape", requireAPIKey, async (req: AuthenticatedRequest, res: Response) => {
+    let transientRobotId: string | null = null;
+    try {
+        const user = req.user;
+        if (!user) return res.status(401).json({ error: 'Unauthorized' });
+
+        const url = (req.body?.url || '').trim();
+        const requestedFormats = (req.body?.formats as OutputFormats[] | undefined) || ['markdown'];
+        const promptInstructions = req.body?.promptInstructions;
+
+        if (!url) return res.status(400).json({ error: 'url is required' });
+        try { new URL(url); } catch { return res.status(400).json({ error: 'invalid url' }); }
+
+        transientRobotId = uuid();
+        await Robot.create({
+            userId: user.id,
+            recording_meta: {
+                id: transientRobotId,
+                name: `sdk-scrape-${transientRobotId.slice(0, 8)}`,
+                type: 'scrape',
+                url,
+                formats: requestedFormats,
+                createdAt: new Date().toISOString(),
+                pairs: 0,
+                updatedAt: new Date().toISOString(),
+                params: [],
+            } as any,
+            recording: { workflow: [] } as any,
+        } as any);
+
+        const runId = await handleRunRecording(transientRobotId, user.id.toString(), 'sdk', requestedFormats, promptInstructions);
+        if (!runId) throw new Error('Failed to start scrape');
+
+        const run = await waitForRunCompletion(runId);
+
+        const so: any = run.serializableOutput || {};
+        const first = (k: string) => (Array.isArray(so[k]) && so[k][0]?.content) || undefined;
+
+        return res.status(200).json({
+            data: {
+                runId: run.runId,
+                status: run.status,
+                url,
+                text: first('text'),
+                markdown: first('markdown'),
+                html: first('html'),
+                summary: first('summary'),
+                links: so.links,
+                screenshots: Object.values(run.binaryOutput || {}),
+                errors: (so._formatErrors as any) || undefined,
+            },
+        });
+    } catch (error: any) {
+        logger.error("[SDK] One-shot scrape error:", error);
+        return res.status(500).json({ error: "Scrape failed", message: error.message });
+    } finally {
+        if (transientRobotId) {
+            try { await Robot.destroy({ where: { 'recording_meta.id': transientRobotId } }); } catch (_) {}
+        }
+    }
+});
+
 /**
  * Wait for run completion
  */
@@ -809,7 +877,8 @@ async function waitForRunCompletion(runId: string, interval: number = 2000) {
         if (run.status === 'success') {
             return run.toJSON();
         } else if (run.status === 'failed') {
-            throw new Error('Run failed');
+            const runLog = (run as any).log || (run.toJSON ? (run.toJSON() as any).log : '') || '';
+            throw new Error(runLog && runLog.trim() ? `Run failed: ${runLog}` : 'Run failed');
         } else if (run.status === 'aborted') {
             throw new Error('Run was aborted');
         }
