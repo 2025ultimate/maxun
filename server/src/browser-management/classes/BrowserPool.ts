@@ -127,9 +127,9 @@ export class BrowserPool {
             }
         }
         
-        // For "run" state, check if the user already has the maximum number of browsers (2)
+        // For "run" state, check if the user already has the maximum number of browsers
         if (userBrowserIds.length >= 2 && !userBrowserIds.includes(id)) {
-            logger.log('debug', "User already has the maximum number of browsers (2)");
+            logger.log('debug', "User already has the maximum number of browsers");
             return false;
         }
 
@@ -549,8 +549,9 @@ export class BrowserPool {
      */
     public hasAvailableBrowserSlots = (userId: string, state?: BrowserState): boolean => {
         const userBrowserIds = this.userToBrowserMap.get(userId) || [];
-        
-        if (userBrowserIds.length >= 2) {
+        const maxBrowsersPerUser = Math.max(1, parseInt(process.env.MAX_BROWSERS_PER_USER || '2', 10));
+
+        if (userBrowserIds.length >= maxBrowsersPerUser) {
             return false;
         }
         
