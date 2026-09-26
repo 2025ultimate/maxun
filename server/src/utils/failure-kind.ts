@@ -17,6 +17,9 @@ const ENGINE_MARKERS = [
   'no available slots',
   'Failed to initialize browser',
   'Failed to connect to browser service',
+  'Failed to start scrape',
+  'Failed to start robot execution',
+  'User has reached maximum browser limit',
 ];
 
 export type FailureKind = 'engine' | 'page';

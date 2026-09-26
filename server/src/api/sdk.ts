@@ -787,10 +787,12 @@ router.post("/sdk/robots/:id/execute", requireAPIKey, async (req: AuthenticatedR
         });
     } catch (error: any) {
         logger.error("[SDK] Error executing robot:", error);
-        return res.status(500).json({
+        const kind = classifyFailure(error.message);
+        const status = kind === 'engine' ? 503 : 500;
+        return res.status(status).json({
             error: "Failed to execute robot",
             message: error.message,
-            kind: classifyFailure(error.message)
+            kind
         });
     }
 });
@@ -857,7 +859,9 @@ router.post("/sdk/scrape", requireAPIKey, async (req: AuthenticatedRequest, res:
         });
     } catch (error: any) {
         logger.error("[SDK] One-shot scrape error:", error);
-        return res.status(500).json({ error: "Scrape failed", message: error.message, kind: classifyFailure(error.message) });
+        const kind = classifyFailure(error.message);
+        const status = kind === 'engine' ? 503 : 500;
+        return res.status(status).json({ error: "Scrape failed", message: error.message, kind });
     } finally {
         if (transientRobotId) {
             try { await Robot.destroy({ where: { 'recording_meta.id': transientRobotId } }); } catch (_) {}

@@ -240,7 +240,13 @@ export class BrowserPool {
             logger.log('debug', `Browser ${id} has failed status`);
             return undefined;
         }
-        
+
+        // Heartbeat: a live fetch means the browser is in use — keep it alive
+        // so the hung-browser reaper doesn't reap an active crawl.
+        if (poolInfo.browser) {
+            poolInfo.lastAccessed = Date.now();
+        }
+
         return poolInfo.browser || undefined;
     };
 
@@ -721,11 +727,29 @@ export class BrowserPool {
             logger.log('warn', `Cleaning up stale browser slot ${id} with status ${info.status}, age: ${Math.round((now - (info.createdAt || 0)) / 1000)}s`);
             this.failBrowserSlot(id);
         });
-        
-        if (staleSlots.length > 0) {
-            logger.log('info', `Cleaned up ${staleSlots.length} stale browser slots`);
+
+        // Reap browsers that are stuck in ready/run with no activity for too long.
+        // These are the ones that hold a user slot hostage after a hung navigation,
+        // which is what produced "maximum browser limit" for subsequent requests.
+        const hungThreshold = Math.max(60000, parseInt(process.env.BROWSER_HANG_REAP_MS || '180000', 10)); // default 3 min
+        const hungSlots: string[] = [];
+        for (const [id, info] of Object.entries(this.pool)) {
+            if (info.status !== "ready") continue;
+            const lastActivity = info.lastAccessed || info.createdAt || 0;
+            const idleFor = now - lastActivity;
+            if (idleFor > hungThreshold) {
+                hungSlots.push(id);
+            }
         }
-        
+        hungSlots.forEach(id => {
+            logger.log('warn', `Reaping hung browser slot ${id} (idle ${Math.round((now - (this.pool[id].lastAccessed || this.pool[id].createdAt || 0)) / 1000)}s) to free the user slot`);
+            this.failBrowserSlot(id);
+        });
+
+        if (staleSlots.length > 0 || hungSlots.length > 0) {
+            logger.log('info', `Cleaned up ${staleSlots.length} stale + ${hungSlots.length} hung browser slots`);
+        }
+
         this.cleanupStaleReservationLocks();
     };
 
