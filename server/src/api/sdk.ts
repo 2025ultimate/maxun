@@ -16,6 +16,7 @@ import { handleRunRecording } from "./record";
 import { WorkflowEnricher } from "../sdk/workflowEnricher";
 import { cancelScheduledWorkflow, scheduleWorkflow } from '../storage/schedule';
 import { encrypt } from '../utils/auth';
+import { classifyFailure } from "../utils/failure-kind";
 import { computeNextRun } from "../utils/schedule";
 import moment from 'moment-timezone';
 import {
@@ -788,7 +789,8 @@ router.post("/sdk/robots/:id/execute", requireAPIKey, async (req: AuthenticatedR
         logger.error("[SDK] Error executing robot:", error);
         return res.status(500).json({
             error: "Failed to execute robot",
-            message: error.message
+            message: error.message,
+            kind: classifyFailure(error.message)
         });
     }
 });
@@ -855,7 +857,7 @@ router.post("/sdk/scrape", requireAPIKey, async (req: AuthenticatedRequest, res:
         });
     } catch (error: any) {
         logger.error("[SDK] One-shot scrape error:", error);
-        return res.status(500).json({ error: "Scrape failed", message: error.message });
+        return res.status(500).json({ error: "Scrape failed", message: error.message, kind: classifyFailure(error.message) });
     } finally {
         if (transientRobotId) {
             try { await Robot.destroy({ where: { 'recording_meta.id': transientRobotId } }); } catch (_) {}
