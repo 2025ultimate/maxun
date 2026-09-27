@@ -136,6 +136,10 @@ async function processRunExecution(data: ExecuteRunData): Promise<void> {
 
   logger.log('info', `Processing run execution job for runId: ${data.runId}, browserId: ${data.browserId}`);
 
+  // Resolved at runtime (data.browserId || plainRun.browserId); hoisted so the
+  // outer finally can release the slot even on throws before/within resolution.
+  let resolvedBrowserId: string | undefined = data.browserId || undefined;
+
   try {
     const run = await Run.findOne({ where: { runId: data.runId } });
     if (!run) {
@@ -182,6 +186,7 @@ async function processRunExecution(data: ExecuteRunData): Promise<void> {
     }
 
     const browserId = data.browserId || plainRun.browserId;
+    resolvedBrowserId = browserId;
 
     if (!browserId) throw new Error(`No browser ID available for run ${data.runId}`);
 
@@ -613,6 +618,22 @@ async function processRunExecution(data: ExecuteRunData): Promise<void> {
     } catch (_) {}
 
     throw error;
+  } finally {
+    // Guaranteed slot release: if any path above threw before destroyRemoteBrowser
+    // ran, the browser slot would leak and starve the user's slots -> "stopped
+    // accepting connections". This finally is the safety net; it only destroys
+    // when the pool still tracks the id, so already-cleaned paths are no-ops.
+    const leakGuardBrowserId = resolvedBrowserId || (data && data.browserId) || undefined;
+    if (leakGuardBrowserId) {
+      try {
+        if (browserPool.getBrowserStatus(leakGuardBrowserId) !== null) {
+          logger.log('warn', `finally: releasing possibly-leaked browser slot ${leakGuardBrowserId} for run ${data.runId}`);
+          await destroyRemoteBrowser(leakGuardBrowserId, data.userId);
+        }
+      } catch (guardErr: any) {
+        logger.log('warn', `finally slot-release failed for ${leakGuardBrowserId}: ${guardErr.message}`);
+      }
+    }
   }
 }
 
