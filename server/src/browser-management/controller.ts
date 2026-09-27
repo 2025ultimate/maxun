@@ -127,7 +127,7 @@ export const createRemoteBrowserForRun = (userId: string): string => {
 
   logger.log('info', `createRemoteBrowserForRun: Reserved slot ${id} for user ${userId}`);
 
-  initializeBrowserAsync(id, userId)
+  initializeBrowserAsync(id, userId, true)
     .catch((error: any) => {
       logger.log('error', `Unhandled error in initializeBrowserAsync for browser ${id}: ${error.message}`);
       browserPool.failBrowserSlot(id);
@@ -330,11 +330,11 @@ export const stopRunningInterpretation = async (userId: string) => {
   }
 };
 
-const initializeBrowserAsync = async (id: string, userId: string) => {
+const initializeBrowserAsync = async (id: string, userId: string, headless: boolean = false) => {
   try {
     const namespace = io.of(id);
     let clientConnected = false;
-    let connectionTimeout: NodeJS.Timeout;
+    let connectionTimeout: NodeJS.Timeout | undefined;
     
     const waitForConnection = new Promise<Socket | null>((resolve) => {
       let initialResolved = false;
@@ -388,7 +388,14 @@ const initializeBrowserAsync = async (id: string, userId: string) => {
       return null;
     };
 
-    const socket = await connectWithRetry(3);
+    // Headless (API/SDK run): no frontend client will ever attach, so the
+    // 15s wait + 2 retries (~21s) is pure dead time that serializes throughput.
+    // Go straight to the dummy socket.
+    const socket = headless ? null : await connectWithRetry(3);
+    if (headless) {
+      logger.log('info', `Headless run for browser ${id}: skipping client-socket wait, using dummy socket directly`);
+      if (connectionTimeout) clearTimeout(connectionTimeout);
+    }
     
     try {
       let browserSession: RemoteBrowser;
