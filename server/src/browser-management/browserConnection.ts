@@ -28,13 +28,13 @@ function browserServiceBase(): { httpUrl: string; secure: boolean; host: string 
 function toReachableWsEndpoint(raw: string): string {
     const host = process.env.BROWSER_WS_HOST || 'localhost';
     const secure = (process.env.BROWSER_WS_SECURE === 'true') || host.endsWith('.onrender.com');
-    // keep any path/query (the browser id segment) from the raw endpoint
+    // keep the path/query (the browser id segment) from the raw endpoint
     let tail = '';
     try {
-        const m = raw.match(/^[a-z]+:\/\/[^/]+(\/.*)?$/i);
-        if (m && m[1]) tail = m[1];
+        const afterHost = raw.replace(/^[a-z]+:\/\/[^/]+/i, '');
+        tail = afterHost || '';
     } catch (_) {}
-    if (secure) return `wss://${host}${tail}`;
+    if (secure) return `wss://${host}${tail}`;  // Render edge routes 443 -> health port -> WS tunnel
     const wsPort = process.env.BROWSER_WS_PORT || '3001';
     return `ws://${host}:${wsPort}${tail}`;
 }
@@ -120,15 +120,7 @@ export async function connectToRemoteBrowser(retries?: number): Promise<Browser>
     try {
         // Public-edge (Render) mode: the health JSON endpoint isn't reachable on the
         // routed port; connect directly to the WS edge instead.
-        const host0 = process.env.BROWSER_WS_HOST || 'localhost';
-        const directWs = (process.env.BROWSER_WS_DIRECT === 'true') || host0.endsWith('.onrender.com');
-        let wsEndpoint: string;
-        if (directWs) {
-            wsEndpoint = `wss://${host0}`;
-            logger.info(`Direct WS connect (no health fetch) to ${wsEndpoint}`);
-        } else {
-            wsEndpoint = await getBrowserServiceEndpoint();
-        }
+        let wsEndpoint: string = await getBrowserServiceEndpoint();
         logger.info(`Connecting to browser service at ${wsEndpoint}...`);
 
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
