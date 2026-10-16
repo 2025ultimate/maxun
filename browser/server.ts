@@ -41,6 +41,11 @@ async function start(): Promise<void> {
                 '--ignore-certificate-errors',
                 '--mute-audio'
             ],
+            // In single-port mode, bind the Playwright WS server to localhost only so
+            // Render's port scanner doesn't see it as a second open port (which caused a
+            // restart loop: "Detected service running on port 3002 with additional ports
+            // HTTP:3001"). The health server's WS tunnel reaches it via 127.0.0.1.
+            host: SINGLE_PORT ? '127.0.0.1' : '0.0.0.0',
             port: BROWSER_WS_PORT,
         });
 
