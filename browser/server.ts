@@ -1,6 +1,7 @@
 import { chromium } from 'playwright-extra';
 import stealthPlugin from 'puppeteer-extra-plugin-stealth';
 import http from 'http';
+import net from 'net';
 import type { BrowserServer } from 'playwright';
 
 // Apply stealth plugin to chromium
@@ -12,6 +13,10 @@ let browserServer: BrowserServer | null = null;
 const BROWSER_WS_PORT = parseInt(process.env.BROWSER_WS_PORT || '3001', 10);
 const BROWSER_HEALTH_PORT = parseInt(process.env.BROWSER_HEALTH_PORT || '3002', 10);
 const BROWSER_WS_HOST = process.env.BROWSER_WS_HOST || 'localhost';
+// On Render only ONE port is publicly routed. SINGLE_PORT=true makes the public
+// HTTP server answer /health AND tunnel WebSocket upgrades to the internal
+// Playwright WS port, so a single exposed port serves both.
+const SINGLE_PORT = process.env.BROWSER_SINGLE_PORT === 'true';
 
 async function start(): Promise<void> {
     console.log('Starting Maxun Browser Service...');
@@ -65,6 +70,22 @@ async function start(): Promise<void> {
                 res.end('Not Found');
             }
         });
+
+        if (SINGLE_PORT) {
+            // Tunnel WS upgrades on the public (health) port to the internal Playwright WS port.
+            healthServer.on('upgrade', (req, socket, head) => {
+                const upstream = net.connect(BROWSER_WS_PORT, '127.0.0.1', () => {
+                    const reqLine = `${req.method} ${req.url} HTTP/${req.httpVersion}\r\n`;
+                    const headers = Object.entries(req.headers).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`).join('\r\n');
+                    upstream.write(reqLine + headers + '\r\n\r\n');
+                    if (head && head.length) upstream.write(head);
+                    upstream.pipe(socket as net.Socket);
+                    (socket as net.Socket).pipe(upstream);
+                });
+                upstream.on('error', (e) => { console.error('WS tunnel upstream error:', e.message); (socket as net.Socket).destroy(); });
+                (socket as net.Socket).on('error', () => upstream.destroy());
+            });
+        }
 
         healthServer.listen(BROWSER_HEALTH_PORT, () => {
             console.log(`✅ Health check server running on port ${BROWSER_HEALTH_PORT}`);

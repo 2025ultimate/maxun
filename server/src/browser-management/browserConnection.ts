@@ -11,14 +11,41 @@ const CONNECTION_CONFIG = {
     connectionTimeout: 30000,
 };
 
+// On Render (and other public-edge hosts) the browser service sits behind an
+// HTTPS/WSS edge on 443. BROWSER_WS_SECURE=true switches health+ws to https/wss
+// and drops the explicit port. Default (unset) keeps the docker-compose http
+// behaviour used on the VPS.
+function browserServiceBase(): { httpUrl: string; secure: boolean; host: string } {
+    const host = process.env.BROWSER_WS_HOST || 'localhost';
+    const secure = (process.env.BROWSER_WS_SECURE === 'true') || host.endsWith('.onrender.com');
+    const port = process.env.BROWSER_HEALTH_PORT || '3002';
+    const httpUrl = secure ? `https://${host}` : `http://${host}:${port}`;
+    return { httpUrl, secure, host };
+}
+
+// Rewrite a ws:// endpoint (which may carry localhost/0.0.0.0/an internal port)
+// to the reachable public one: wss://<host> on 443 when secure, else ws://<host>:<wsPort>.
+function toReachableWsEndpoint(raw: string): string {
+    const host = process.env.BROWSER_WS_HOST || 'localhost';
+    const secure = (process.env.BROWSER_WS_SECURE === 'true') || host.endsWith('.onrender.com');
+    // keep any path/query (the browser id segment) from the raw endpoint
+    let tail = '';
+    try {
+        const m = raw.match(/^[a-z]+:\/\/[^/]+(\/.*)?$/i);
+        if (m && m[1]) tail = m[1];
+    } catch (_) {}
+    if (secure) return `wss://${host}${tail}`;
+    const wsPort = process.env.BROWSER_WS_PORT || '3001';
+    return `ws://${host}:${wsPort}${tail}`;
+}
+
 /**
  * Get the WebSocket endpoint from the browser service health check
  * @returns Promise<string> - The WebSocket endpoint URL with browser ID
  */
 async function getBrowserServiceEndpoint(): Promise<string> {
-    const healthPort = process.env.BROWSER_HEALTH_PORT || '3002';
-    const healthHost = process.env.BROWSER_WS_HOST || 'localhost';
-    const healthEndpoint = `http://${healthHost}:${healthPort}/health`;
+    const { httpUrl } = browserServiceBase();
+    const healthEndpoint = `${httpUrl}/health`;
 
     try {
         logger.debug(`Fetching WebSocket endpoint from: ${healthEndpoint}`);
@@ -26,8 +53,9 @@ async function getBrowserServiceEndpoint(): Promise<string> {
         const data = await response.json();
 
         if (data.status === 'healthy' && data.wsEndpoint) {
-            logger.debug(`Got WebSocket endpoint: ${data.wsEndpoint}`);
-            return data.wsEndpoint;
+            const reachable = toReachableWsEndpoint(data.wsEndpoint);
+            logger.debug(`Got WebSocket endpoint: ${data.wsEndpoint} -> ${reachable}`);
+            return reachable;
         }
 
         throw new Error('Health check did not return a valid wsEndpoint');
@@ -90,7 +118,17 @@ export async function connectToRemoteBrowser(retries?: number): Promise<Browser>
     const maxRetries = retries ?? CONNECTION_CONFIG.maxRetries;
 
     try {
-        const wsEndpoint = await getBrowserServiceEndpoint();
+        // Public-edge (Render) mode: the health JSON endpoint isn't reachable on the
+        // routed port; connect directly to the WS edge instead.
+        const host0 = process.env.BROWSER_WS_HOST || 'localhost';
+        const directWs = (process.env.BROWSER_WS_DIRECT === 'true') || host0.endsWith('.onrender.com');
+        let wsEndpoint: string;
+        if (directWs) {
+            wsEndpoint = `wss://${host0}`;
+            logger.info(`Direct WS connect (no health fetch) to ${wsEndpoint}`);
+        } else {
+            wsEndpoint = await getBrowserServiceEndpoint();
+        }
         logger.info(`Connecting to browser service at ${wsEndpoint}...`);
 
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -135,9 +173,8 @@ export async function connectToRemoteBrowser(retries?: number): Promise<Browser>
  */
 export async function checkBrowserServiceHealth(): Promise<boolean> {
     try {
-        const healthPort = process.env.BROWSER_HEALTH_PORT || '3002';
-        const healthHost = process.env.BROWSER_WS_HOST || 'localhost';
-        const healthEndpoint = `http://${healthHost}:${healthPort}/health`;
+        const { httpUrl } = browserServiceBase();
+        const healthEndpoint = `${httpUrl}/health`;
 
         const response = await fetch(healthEndpoint);
         const data = await response.json();
