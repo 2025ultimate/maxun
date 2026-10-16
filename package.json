@@ -96,7 +96,7 @@
   },
   "scripts": {
     "start": "npm run build:server && npm run server",
-    "server": "cross-env NODE_OPTIONS='--max-old-space-size=4096' node server/dist/server/src/server.js",
+    "server": "node server/dist/server/src/server.js",
     "start:dev": "concurrently -k \"npm run server:dev\" \"npm run client\"",
     "server:dev": "cross-env NODE_OPTIONS='--max-old-space-size=4096' nodemon server/src/server.ts",
     "client": "vite",
